@@ -1,0 +1,12 @@
+---
+- name: Configure MOTD Banner on a target device
+  hosts: all
+  gather_facts: false
+  connection: network_cli
+
+  tasks:
+    - name: Set the MOTD banner text
+      cisco.ios.ios_banner:
+        banner: motd
+        text: "{{ motd_text }}"
+        state: present

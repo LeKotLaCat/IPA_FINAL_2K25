@@ -1,0 +1,17 @@
+---
+- name: Get running config from a target device
+  hosts: all
+  gather_facts: false
+  connection: network_cli
+
+  tasks:
+    - name: Get running config
+      cisco.ios.ios_command:
+        commands:
+          - show running-config
+      register: config_output
+
+    - name: Save config to file
+      copy:
+        content: "{{ config_output.stdout[0] }}"
+        dest: "./show_run_{{ student_id }}_{{ ansible_host }}.txt"
