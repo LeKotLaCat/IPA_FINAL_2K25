@@ -3,11 +3,6 @@
 # student ID: 66070139
 # GitHub Repo: https://github.com/LeKotLaCat/IPA_FINAL_2K25.git
 #######################################################################################
-#######################################################################################
-# Yourname:
-# Your student ID:
-# Your GitHub Repo: 
-#######################################################################################
 import os
 import requests
 import json
@@ -93,7 +88,7 @@ while True:
                 responseMessage = "Error: No command found."
 
             else:
-                responseMessage = "Error: Unknown command or invalid format"
+                responseMessage = "Error: No command found."
 
         # กรณีที่ 2: คำสั่งมี 3 ส่วน (e.g., /... 10.0.15.61 create)
         elif num_parts == 3:
@@ -114,7 +109,7 @@ while True:
 
         else:
             if message != f"/{MY_STUDENT_ID}":
-                 responseMessage = "Error: Invalid command format."
+                 responseMessage = "Error: No command found."
         # --- END: 2025 New Command Parsing Logic (Refined) ---
 
         # ส่วนของการส่งข้อความกลับ
