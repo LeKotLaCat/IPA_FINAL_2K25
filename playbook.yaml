@@ -1,0 +1,15 @@
+---
+- name: Backup running config
+  hosts: ios
+  gather_facts: false
+  tasks:
+    - name: Get running config
+      cisco.ios.ios_command: # ใช้ชื่อเต็มเพราะเราจะใช้ ansible-core
+        commands:
+          - show running-config
+      register: config_output
+
+    - name: Save config to file
+      copy:
+        content: "{{ config_output.stdout[0] }}"
+        dest: "./show_run_{{ student_id }}_{{ inventory_hostname }}.txt"
