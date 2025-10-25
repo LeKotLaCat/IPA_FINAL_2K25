@@ -6,7 +6,15 @@
 
 import json
 import requests
-import time # <-- ตรวจสอบว่ามี import time หรือยัง
+import time
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+ROUTER_USER = os.environ.get("ROUTER_USER")
+ROUTER_PASS = os.environ.get("ROUTER_PASS")
+
+basicauth = (ROUTER_USER, ROUTER_PASS) 
 
 # ปิดคำเตือน SSL InsecureRequestWarning
 requests.packages.urllib3.disable_warnings()
@@ -16,9 +24,7 @@ headers = {
     "Accept": "application/yang-data+json",
     "Content-Type": "application/yang-data+json"
 }
-# อ่าน User/Pass จาก .env จะดีกว่า แต่ถ้าโจทย์บังคับ hardcode ก็ใช้แบบนี้ได้
-# แนะนำให้ใช้ os.environ.get() เหมือนในไฟล์หลัก
-basicauth = ("admin", "cisco") 
+
 
 # --- Helper Function ---
 def _get_status(student_id, router_ip):
@@ -125,4 +131,3 @@ def status(student_id, router_ip):
         return f"No Interface loopback {student_id} (checked by Restconf)"
 
 # --- END OF FILE ---
-# ตรวจสอบให้แน่ใจว่าไม่มีโค้ดอื่นใดหลงเหลืออยู่ใต้บรรทัดนี้

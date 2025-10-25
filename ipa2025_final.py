@@ -37,7 +37,7 @@ GIGABIT_STATUS_COMMAND = "gigabit_status"
 
 # --- Main Application Loop ---
 while True:
-    time.sleep(1)
+    # time.sleep(1)
     
     # Fetch the latest message from Webex
     try:
@@ -51,98 +51,80 @@ while True:
     except requests.exceptions.RequestException as e:
         print(f"Error fetching messages: {e}")
         continue
-
+    
     message = json_data["items"][0]["text"]
     print(f"Received message: \"{message}\"")
 
-    # --- Start of Command Parsing Logic ---
     if message.startswith(f"/{MY_STUDENT_ID}"):
         parts = message.split()
         num_parts = len(parts)
         
-        # Initialize variables for each loop iteration
-        responseMessage = ""
-        filename = None
-        command = ""
+        responseMessage, filename, command = "", None, ""
 
-        if num_parts < 2:
-            continue # Ignore if only /studentID is sent
+        if num_parts < 2: 
+            continue
 
-        # --- Flexible Command Parsing Logic ---
+        # --- Final Command Parsing Logic ---
+        ip_address, main_command = None, None
         
-        # Case 1: Handle GIGABIT_STATUS (can appear anywhere after student ID)
-        if GIGABIT_STATUS_COMMAND in parts:
-            command = GIGABIT_STATUS_COMMAND
-            responseMessage = netmiko_final.gigabit_status()
+        # ระบุตำแหน่งที่เป็นไปได้ของ IP และ Command
+        # Case: /... <ip> <command> ...
+        if num_parts >= 3 and parts[1] in VALID_IPS:
+            ip_address = parts[1]
+            main_command = parts[2]
+        # Case: /... <command>
+        elif num_parts == 2:
+            main_command = parts[1]
         
-        # Case 2: Handle SHOWRUN (requires an IP)
-        elif SHOWRUN_COMMAND in parts:
-            command = SHOWRUN_COMMAND
-            if num_parts < 3:
-                responseMessage = "Error: No IP specified for showrun"
+        # --- เริ่มตัดสินใจจาก main_command ---
+        if main_command in ["restconf", "netconf"]:
+            user_sessions[MY_STUDENT_ID] = {"method": main_command}
+            responseMessage = f"Ok: {main_command.capitalize()}"
+
+        elif main_command in PART1_COMMANDS:
+            if MY_STUDENT_ID not in user_sessions:
+                responseMessage = "Error: No method specified"
+            elif not ip_address:
+                responseMessage = "Error: No IP specified"
             else:
-                target_ip = parts[1] # Assume IP is always the second part
-                if target_ip not in VALID_IPS:
-                    responseMessage = "Error: Invalid IP address specified."
-                else:
-                    responseMessage, filename = ansible_final.showrun(MY_STUDENT_ID, target_ip)
+                method = user_sessions[MY_STUDENT_ID]["method"]
+                module = restconf_final if method == "restconf" else netconf_final
+                func_to_call = getattr(module, main_command)
+                responseMessage = func_to_call(MY_STUDENT_ID, ip_address)
 
-        # Case 3: Handle all other commands (Part 1 and MOTD)
+        elif main_command == MOTD_COMMAND:
+            if not ip_address:
+                responseMessage = "Error: No IP specified"
+            elif ip_address not in VALID_IPS:
+                responseMessage = "Error: No MOTD Configured" # ตามโจทย์พิเศษ
+            else:
+                if num_parts == 3:
+                    responseMessage = netmiko_final.get_motd(ip_address)
+                else:
+                    motd_message = " ".join(parts[3:])
+                    responseMessage = ansible_final.set_motd(ip_address, motd_message)
+
+        # --- START: การเปลี่ยนแปลงสำหรับ gigabit_status ---
+        elif main_command == GIGABIT_STATUS_COMMAND:
+            if not ip_address:
+                responseMessage = "Error: No IP specified"
+            else:
+                # ส่ง IP ที่ได้รับมาเข้าไปในฟังก์ชัน
+                responseMessage = netmiko_final.gigabit_status(ip_address)
+        # --- END: การเปลี่ยนแปลง ---
+        
+        elif main_command == SHOWRUN_COMMAND:
+            if not ip_address:
+                responseMessage = "Error: No IP specified"
+            else:
+                command = SHOWRUN_COMMAND
+                responseMessage, filename = ansible_final.showrun(MY_STUDENT_ID, ip_address)
+        
         else:
-            method_is_set = MY_STUDENT_ID in user_sessions
-            
-            # Subcase 3.1: Two-part commands (e.g., set method, or errors)
-            if num_parts == 2:
-                command = parts[1]
-                if command in ["restconf", "netconf"]:
-                    user_sessions[MY_STUDENT_ID] = {"method": command}
-                    responseMessage = f"Ok: {command.capitalize()}"
-                elif command in PART1_COMMANDS:
-                    responseMessage = "Error: No method specified" if not method_is_set else "Error: No IP specified"
-                elif command in VALID_IPS:
-                    responseMessage = "Error: No command found."
-                else:
-                    responseMessage = "Error: Unknown command or invalid format"
-
-            # Subcase 3.2: Three or more parts commands (Part 1 with IP, or MOTD)
-            elif num_parts >= 3:
-                target_ip = parts[1]
-                command = parts[2]
-                
-                # --- START: New MOTD Logic ---
-                # จัดการกับ MOTD เป็นกรณีพิเศษก่อน
-                if command == MOTD_COMMAND:
-                    # ถ้า IP ไม่ถูกต้อง หรือถ้า get_motd คืนค่า Error
-                    # ให้ตอบกลับว่า "No MOTD Configured" ทั้งสองกรณี
-                    if target_ip not in VALID_IPS:
-                        responseMessage = "Error: No MOTD Configured"
-                    else:
-                        if num_parts == 3: # Get MOTD
-                            responseMessage = netmiko_final.get_motd(target_ip)
-                        else: # Set MOTD
-                            motd_message = " ".join(parts[3:])
-                            responseMessage = ansible_final.set_motd(target_ip, motd_message)
-
-                # --- END: New MOTD Logic ---
-
-                # --- Logic เดิมสำหรับ Part 1 และ SHOWRUN ---
-                else: # ถ้าไม่ใช่คำสั่ง MOTD ให้ทำงานตาม Logic เดิม
-                    if target_ip not in VALID_IPS:
-                        responseMessage = "Error: Invalid IP address specified."
-                    elif command in PART1_COMMANDS:
-                        if num_parts != 3:
-                            responseMessage = "Error: Invalid command format for Part 1 commands."
-                        elif not method_is_set:
-                            responseMessage = "Error: No method specified"
-                        else:
-                            method = user_sessions[MY_STUDENT_ID]["method"]
-                            module = restconf_final if method == "restconf" else netconf_final
-                            func_to_call = getattr(module, command)
-                            responseMessage = func_to_call(MY_STUDENT_ID, target_ip)
-                    elif command == SHOWRUN_COMMAND:
-                        responseMessage, filename = ansible_final.showrun(MY_STUDENT_ID, target_ip)
-                    else:
-                        responseMessage = f"Error: Unknown command '{command}'"
+             if ip_address and not main_command:
+                  responseMessage = "Error: No command found."
+             else:
+                  responseMessage = "Error: Unknown command or invalid format"
 
 
         # --- Send Response to Webex ---

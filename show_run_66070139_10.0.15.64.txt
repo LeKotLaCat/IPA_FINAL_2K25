@@ -1,8 +1,8 @@
 Building configuration...
 
-Current configuration : 4636 bytes
+Current configuration : 4766 bytes
 !
-! Last configuration change at 22:05:51 UTC Fri Oct 24 2025 by admin
+! Last configuration change at 03:49:58 UTC Sat Oct 25 2025 by admin
 !
 version 16.9
 service timestamps debug datetime msec
@@ -148,6 +148,12 @@ interface Loopback66070100
 interface Loopback66070112
  description Created via RESTCONF
  ip address 172.1.12.1 255.255.255.0
+ shutdown
+!
+interface Loopback66070139
+ description Created by NETCONF for 66070139
+ ip address 172.1.39.1 255.255.255.0
+ shutdown
 !
 interface Loopback66070179
  description My final2024 loopback
@@ -199,7 +205,7 @@ control-plane
 !
 !
 banner motd ^C
-High TemplaZ 555
+hello world 123
 ^C
 !
 line con 0

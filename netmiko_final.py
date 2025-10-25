@@ -7,17 +7,16 @@ load_dotenv()
 ROUTER_USER = os.environ.get("ROUTER_USER", "admin")
 ROUTER_PASS = os.environ.get("ROUTER_PASS", "cisco")
 
-def gigabit_status():
+def gigabit_status(router_ip): # <-- 1. รับ router_ip เป็นพารามิเตอร์
     """
-    ตรวจสอบสถานะของ GigabitEthernet interfaces ทั้งหมดบน Router ที่กำหนด
-    ฟังก์ชันนี้จะทำงานกับ IP ที่ระบุไว้ภายใน (hardcoded) ตามโจทย์เดิม
+    ตรวจสอบสถานะของ GigabitEthernet interfaces ทั้งหมดบน Router ที่ระบุแบบไดนามิก
     """
-    # ระบุ IP ของ Router ที่จะตรวจสอบ (ตามโจทย์เดิมของ Part 2)
-    device_ip = "10.0.15.61" # หรือ IP หลักของ pod ที่คุณใช้สำหรับ gigabit_status
+    print(f"NETMIKO: Getting Gigabit status from {router_ip}")
     
+    # 2. สร้าง device_params จาก router_ip ที่ได้รับมา
     device_params = { 
         "device_type": "cisco_ios", 
-        "ip": device_ip, 
+        "ip": router_ip, 
         "username": ROUTER_USER, 
         "password": ROUTER_PASS, 
         "timeout": 20 
@@ -26,39 +25,36 @@ def gigabit_status():
     ans = ""
     try:
         with ConnectHandler(**device_params) as ssh:
-            # ดึงข้อมูลสถานะ interface เป็น string ธรรมดา
             result_string = ssh.send_command("show ip interface brief", use_textfsm=False)
-            
-            # แยกผลลัพธ์ออกเป็นทีละบรรทัด และข้ามบรรทัดหัวข้อ (บรรทัดแรก)
             lines = result_string.strip().split('\n')[1:]
             
             up, down, admin_down = 0, 0, 0
             detailed_statuses = []
 
-            # วนลูปตรวจสอบทีละบรรทัด
             for line in lines:
                 parts = line.split()
-                # ข้ามบรรทัดว่าง หรือบรรทัดที่ไม่ใช่ GigabitEthernet
                 if not parts or not parts[0].startswith("GigabitEthernet"):
                     continue
                 
                 interface_name = parts[0]
-                # สถานะจะอยู่ที่ 2-3 ตำแหน่งสุดท้ายของ list
-                # เราจะรวมมันเข้าด้วยกันเพื่อให้ได้ status ที่สมบูรณ์
-                current_status = " ".join(parts[4:])
+                status_parts = []
+                # วนจากท้ายมาหน้าเพื่อหา status
+                for part in reversed(parts):
+                    if part.lower() in ['up', 'down']:
+                        status_parts.insert(0, part)
+                        if len(status_parts) >= 2 and status_parts[0] == 'down':
+                             if parts[parts.index(part)-1] == 'administratively':
+                                  status_parts.insert(0, 'administratively')
+                        break
+                    
+                current_status = " ".join(status_parts)
 
-                # เพิ่มสถานะของ interface นี้เข้าไปใน list
                 detailed_statuses.append(f"{interface_name} {current_status}")
                 
-                # นับจำนวนตามสถานะ
-                if current_status == "up":
-                    up += 1
-                elif current_status == "down":
-                    down += 1
-                elif current_status == "administratively down":
-                    admin_down += 1
+                if current_status == "up up": up += 1
+                elif current_status == "down down": down += 1
+                elif current_status == "administratively down down": admin_down += 1
             
-            # ประกอบร่างข้อความผลลัพธ์สุดท้ายตาม Format ที่โจทย์ต้องการ
             details = ", ".join(detailed_statuses)
             summary = f"{up} up, {down} down, {admin_down} administratively down"
             ans = f"{details} -> {summary}"
@@ -67,10 +63,8 @@ def gigabit_status():
             return ans
 
     except Exception as e:
-        print(f"An error occurred in Netmiko (gigabit_status) on {device_ip}: {e}")
+        print(f"An error occurred in Netmiko (gigabit_status) on {router_ip}: {e}")
         return "Error: Could not get Gigabit status."
-
-# --- START: ฟังก์ชันที่แก้ไขแล้ว ---
 
 def get_motd(router_ip):
     """
@@ -82,7 +76,7 @@ def get_motd(router_ip):
     device_params = {
         "device_type": "cisco_ios", "ip": router_ip,
         "username": ROUTER_USER, "password": ROUTER_PASS,
-        "timeout": 20, # แก้จาก conn_timeout เป็น timeout
+        "timeout": 20,
     }
 
     try:
@@ -96,7 +90,7 @@ def get_motd(router_ip):
                 # 2. แปลง Output เป็น List ของบรรทัด
                 lines = output.strip().split('\n')
                 
-                # 3. (Logic ใหม่) ตรวจสอบและตัด Header ที่ไม่ต้องการออก
+                # 3.ตรวจสอบและตัด Header ที่ไม่ต้องการออก
                 # บางครั้ง output จะมีบรรทัด "The MOTD banner is:" นำหน้า
                 if "The MOTD banner is:" in lines[0]:
                     # ถ้ามี Header, ให้เอาข้อความตั้งแต่บรรทัดที่สองเป็นต้นไป
