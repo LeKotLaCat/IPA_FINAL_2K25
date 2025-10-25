@@ -109,32 +109,41 @@ while True:
                 target_ip = parts[1]
                 command = parts[2]
                 
-                if target_ip not in VALID_IPS:
-                    responseMessage = "Error: Invalid IP address specified."
-                elif command in PART1_COMMANDS:
-                    if num_parts != 3: # Part 1 commands must be exactly 3 parts
-                        responseMessage = "Error: Invalid command format for Part 1 commands."
-                    elif not method_is_set:
-                        responseMessage = "Error: No method specified"
+                # --- START: New MOTD Logic ---
+                # จัดการกับ MOTD เป็นกรณีพิเศษก่อน
+                if command == MOTD_COMMAND:
+                    # ถ้า IP ไม่ถูกต้อง หรือถ้า get_motd คืนค่า Error
+                    # ให้ตอบกลับว่า "No MOTD Configured" ทั้งสองกรณี
+                    if target_ip not in VALID_IPS:
+                        responseMessage = "Error: No MOTD Configured"
                     else:
-                        method = user_sessions[MY_STUDENT_ID]["method"]
-                        module = restconf_final if method == "restconf" else netconf_final
-                        func_to_call = getattr(module, command)
-                        responseMessage = func_to_call(MY_STUDENT_ID, target_ip)
-                elif command == MOTD_COMMAND:
-                    if num_parts == 3: # Get MOTD
-                        responseMessage = netmiko_final.get_motd(target_ip)
-                    else: # Set MOTD
-                        motd_message = " ".join(parts[3:])
-                        responseMessage = ansible_final.set_motd(target_ip, motd_message)
-                else:
-                     responseMessage = f"Error: Unknown command '{command}'"
-            
-            else: # Should not be reached, but as a fallback
-                if message != f"/{MY_STUDENT_ID}":
-                     responseMessage = "Error: Invalid command format."
+                        if num_parts == 3: # Get MOTD
+                            responseMessage = netmiko_final.get_motd(target_ip)
+                        else: # Set MOTD
+                            motd_message = " ".join(parts[3:])
+                            responseMessage = ansible_final.set_motd(target_ip, motd_message)
 
-        # --- End of Command Parsing Logic ---
+                # --- END: New MOTD Logic ---
+
+                # --- Logic เดิมสำหรับ Part 1 และ SHOWRUN ---
+                else: # ถ้าไม่ใช่คำสั่ง MOTD ให้ทำงานตาม Logic เดิม
+                    if target_ip not in VALID_IPS:
+                        responseMessage = "Error: Invalid IP address specified."
+                    elif command in PART1_COMMANDS:
+                        if num_parts != 3:
+                            responseMessage = "Error: Invalid command format for Part 1 commands."
+                        elif not method_is_set:
+                            responseMessage = "Error: No method specified"
+                        else:
+                            method = user_sessions[MY_STUDENT_ID]["method"]
+                            module = restconf_final if method == "restconf" else netconf_final
+                            func_to_call = getattr(module, command)
+                            responseMessage = func_to_call(MY_STUDENT_ID, target_ip)
+                    elif command == SHOWRUN_COMMAND:
+                        responseMessage, filename = ansible_final.showrun(MY_STUDENT_ID, target_ip)
+                    else:
+                        responseMessage = f"Error: Unknown command '{command}'"
+
 
         # --- Send Response to Webex ---
         if responseMessage:
